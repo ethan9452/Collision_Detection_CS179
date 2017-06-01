@@ -1,0 +1,40 @@
+
+
+
+Sources for Collision Detection Optimization
+	- https://en.wikipedia.org/wiki/Collision_detection#Optimization
+	- https://www.toptal.com/game/video-game-physics-part-ii-collision-detection-for-solid-objects
+
+
+Simulation Specifications
+	Particles are created in a box. The box has dimensions box_x X box_y, and
+	all the points are positive (box is on 1st quadrant of Cartesian plane).
+
+
+Input Format: 
+	Array of Particle structs
+
+
+Output Format:
+	2D array of dimension num_partices X num_particles. 
+	arr[x,y] = 1 when the particles indexed by x and y collide, 
+	0 otherwise:
+
+	eg: if the collisions are (0,1), (1,2) - and there are 3 particles:
+	
+		012
+
+	0	010
+	1	101
+	2	010
+
+
+
+Misc
+	- was getting weird segfault with many particles. found out that it was due to
+	num_particles^2 overflowing int. num_particles^2 is the max number of collisions
+		- fixed by changing ints to unsigned int to give more space. 
+
+Dependencies:
+	Python:
+		- matplotlib
