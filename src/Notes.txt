@@ -11,6 +11,43 @@ Simulation Specifications
 	all the points are positive (box is on 1st quadrant of Cartesian plane).
 
 
+CPU Sort and Sweep notes:
+	Works best when the reigon is sparse. Not much faster than naive when the reigon is dense.
+
+	Ex:
+		Generating 50000 particles with radii in the range 1 to 2 (inclusive), inside a bounding box with dimemsions 10000 by 10000
+
+		----------------------------------------------
+		Running collision detection algs...
+
+		Computation time for Naive Alg, CPU: 16.4901s
+		0.0606424 max frames per second
+		Number of colliding pairs: 341
+
+
+		Computation time for Optimized Alg 1 (Sort and Sweep), CPU: 0.053253s
+		18.7783 max frames per second
+		Number of colliding pairs: 341
+
+	In fact, due to the overhead of alg, it is slower than naive when the reigon is super particle dense.
+
+	Ex:
+		Generating 1000 particles with radii in the range 5 to 5 (inclusive), inside a bounding box with dimemsions 20 by 20
+
+		----------------------------------------------
+		Running collision detection algs...
+
+		Computation time for Naive Alg, CPU: 0.009975s
+		100.251 max frames per second
+		Number of colliding pairs: 486621
+
+
+		Computation time for Optimized Alg 1 (Sort and Sweep), CPU: 0.016229s
+		61.6181 max frames per second
+		Number of colliding pairs: 486621
+
+
+
 Input Format: 
 	Array of Particle structs
 
@@ -28,6 +65,18 @@ Output Format:
 	1	101
 	2	010
 
+BUGS:
+	- sometimes alg is wrong when I use cluster option. theory below...
+	Definition of collision:
+		We define a collision as 2 particles INTERSECTING, not just touching. Defining collision as 
+		only touching leads to problems with the search and sweep algorithm. Specifically, there is the 
+		case where particleA's end_bound is equal to particleB's begin bound. By chance, it is possible
+		that when sorting, A's end_bound comes before B's begin. In this case, A will become 'inactive' 
+		before we see B, therefore a collision between A and B will not be checked. 
+			* To be honest, the above is just a theory. There was a bug where the search and sweep 
+			  alg would not match the naive alg. And it happened mainly when the alg was checking a 
+			  particle dense reigon (also with the clustered particle option on). Seemed to go away 
+			  when I changed collision to mean intersection. 
 
 
 Misc

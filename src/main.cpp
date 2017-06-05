@@ -20,6 +20,7 @@
 #include "project_typedefs.hpp"
 #include "collision_solve_host.hpp"
 #include <climits>
+#include <math.h>
 
 
 using namespace std;
@@ -121,6 +122,7 @@ int main(int argc, char **argv) {
 
     unsigned int num_particles;
     float min_rad, max_rad, box_x, box_y;
+    int cluster; 
 
 
 
@@ -135,6 +137,8 @@ int main(int argc, char **argv) {
     cin >> box_x;
     cout << "Enter particle holding box's y length: ";
     cin >> box_y;
+    cout << "Cluster points around center, or uniformly distributed? 1 for cluster, 0 for uniform:"; // TODO REMOVE cluster if i can't find the bug
+    cin >> cluster;
 
     // Cap number of particles at 60000 to prevent overflow error
     // 60000^2 is close to the ULONG_MAX
@@ -153,7 +157,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    cout << "Generating " << num_particles << " particles with radii in the range " 
+    cout << "\nGenerating " << num_particles << " particles with radii in the range " 
         << min_rad << " to " << max_rad << " (inclusive), inside a bounding box with dimemsions " 
         << box_x << " by " << box_y << "\n\n";
 
@@ -175,42 +179,127 @@ int main(int argc, char **argv) {
         particles[i].radius = (r1 * (max_rad - min_rad)) + min_rad;
 
         // possible range for center: [radius, box_len - radius]
+        if(cluster == 0) {
+            float x_range = box_x - (2 * particles[i].radius); 
+            particles[i].x = (r2 * x_range) + particles[i].radius;
 
-        int x_range = box_x - (2 * particles[i].radius);
-        particles[i].x = (r2 * x_range) + particles[i].radius;
+            float y_range = box_y - (2 * particles[i].radius);
+            particles[i].y = (r3 * y_range) + particles[i].radius;
+        }
+        else {
+            // Used for choosing positive or negative
+            // float r4 = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
+            // float r5 = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
 
-        int y_range = box_y - (2 * particles[i].radius);
-        particles[i].y = (r3 * y_range) + particles[i].radius;
+            // Center (x,y) = (box_x / 2., box_y / 2.)
+            // Can use a uniform^2 or uniform^3, 4, ... distribution for heavier density in middle
+
+            float x_range = box_x - (2 * particles[i].radius);
+            float y_range = box_y - (2 * particles[i].radius);
+
+
+            // cout << "x_range: " << x_range << "\n";
+            // cout << "y_range: " << y_range << "\n"; // TODO DELETE
+
+            float radius; // max radius is min(x_range, y_range)
+            float max_rad;
+            if(x_range < y_range) {
+                max_rad = x_range / 2.;
+            }
+            else {
+                max_rad = y_range / 2.;
+            }
+
+            // cout << "max_rad: " << max_rad << "\n"; // TODO DELETE
+
+
+
+            // radius = (r2 * max_rad) * (r2 * max_rad) / max_rad; // Uniform squared
+            if(max_rad == 0.) {
+                radius = 0.;
+            }
+            else {
+                radius = (r2 * max_rad) * (r2 * max_rad) * (r2 * max_rad) / (max_rad * max_rad); // Uniform cubed
+            }
+            
+            
+
+            // cout << "radius: " << radius << "\n"; // TODO DELETE
+
+            float radians = r3 * 6.28318530718; // Between 0 and 2pi
+
+            // cout << "radians: " << radians << "\n"; // TODO DELETE
+
+            // x = r*cos(t)
+            // y = r*sin(t)
+            particles[i].x = (radius * cos(radians)) + (x_range / 2.) + particles[i].radius;
+
+            // cout << "particles[i].x: " << particles[i].x << "\n"; // TODO DELETE
+
+
+
+            particles[i].y = (radius * sin(radians)) + (y_range / 2.) + particles[i].radius;
+
+            // cout << "particles[i].y: " << particles[i].y << "\n"; // TODO DELETE
+
+            // float half_x_range = x_range / 2.;
+            // float uniform_squared = (r2 * half_x_range) * (r2 * half_x_range) / (half_x_range);
+            // // Choose negative or positive
+            // if(r4 > .5) {
+            //     particles[i].x = (box_x / 2.) + uniform_squared;
+            // }
+            // else {
+            //     particles[i].x = (box_x / 2.) - uniform_squared;
+            // }
+
+            // float y_range = box_y - (2 * particles[i].radius);
+            // uniform_squared = (r3 * y_range / 2.) * (r3 * y_range / 2.) / (y_range / 2.);
+            // // Choose negative or positive
+            // if(r5 > .5) {
+            //     particles[i].y = (box_y / 2.) + uniform_squared;
+            // }
+            // else {
+            //     particles[i].y = (box_y / 2.) - uniform_squared;
+            // }
+
+
+        }
+
+        
     }
 
 
     // Check if any particles created are outside the box (debugging)
-    if(DEBUG_MODE) {
-        for(unsigned int i = 0; i < num_particles; i++) {
-            if(particles[i].x - particles[i].radius < 0) {
-                cout << "Particle " << i << " sticking of the left side.";
-                return -1;
-            }
-            if(particles[i].x + particles[i].radius > box_x) {
-                cout << "Particle " << i << " sticking of the right side.";
-                return -1;
-            }
-            if(particles[i].y - particles[i].radius < 0) {
-                cout << "Particle " << i << " sticking of the bottom side.";
-                return -1;
-            }
-            if(particles[i].y + particles[i].radius > box_y) {
-                cout << "Particle " << i << " sticking of the top side.";
-                return -1;
-            }   
+    for(unsigned int i = 0; i < num_particles; i++) {
+        if(particles[i].x - particles[i].radius < 0) {
+            cout << "Particle " << i << " sticking of the left side.";
+            return -1;
         }
+        if(particles[i].x + particles[i].radius > box_x) {
+            cout << "Particle " << i << " sticking of the right side.";
+            return -1;
+        }
+        if(particles[i].y - particles[i].radius < 0) {
+            cout << "Particle " << i << " sticking of the bottom side.";
+            return -1;
+        }
+        if(particles[i].y + particles[i].radius > box_y) {
+            cout << "Particle " << i << " sticking of the top side.";
+            return -1;
+        }
+        if(isnan(particles[i].x) || isnan(particles[i].y)) {
+            cout << particles[i].x << "," << particles[i].y << " something is NaN!!!!\n";
+            return -1;
+        }   
     }
+    
 
     // Print particles for debugging
     if(DEBUG_MODE) { print_particle_array(particles, num_particles); cout << "\n\n"; }
 
     /*********** CPU IMPLEMENTATION ***********/
-
+    cout << "----------------------------------------------\n";
+    cout << "Running collision detection algs...\n";
 
     // Naive CPU Implementation
     /*
@@ -253,7 +342,7 @@ int main(int argc, char **argv) {
     float comp_time_CPU_optimized = -1.;
     detect_collisions_CPU_optimized1(particles, collisions_CPU_optimized, num_particles, &comp_time_CPU_optimized);
     
-    cout << "\n\nComputation time for Optimized Alg, CPU: " << comp_time_CPU_optimized << "s\n";
+    cout << "\n\nComputation time for Optimized Alg 1 (Sort and Sweep), CPU: " << comp_time_CPU_optimized << "s\n";
     cout << 1./comp_time_CPU_optimized << " max frames per second\n";
     cout << "Number of colliding pairs: " << count_colliding_pairs(collisions_CPU_optimized, num_particles) << "\n";
 
@@ -264,6 +353,28 @@ int main(int argc, char **argv) {
         cout << "---------------\n";
     }
 
+
+    // Optimized CPU implementation 2
+    bool * collisions_CPU_optimized2 = (bool *) malloc(sizeof(bool) * num_particles * num_particles);
+    if(collisions_CPU_optimized2 == NULL) {
+        cout << "malloc for collisions_CPU_optimized2 failed. failed to allocate " << (sizeof(bool) * num_particles * num_particles)
+                << "bytes.\n";
+        return -1;
+    }    
+    memset(collisions_CPU_optimized2, 0, num_particles * num_particles);
+    float comp_time_CPU_optimized2 = -1.;
+    detect_collisions_CPU_optimized2(particles, collisions_CPU_optimized2, num_particles, &comp_time_CPU_optimized2);
+    
+    cout << "\n\nComputation time for Optimized Alg 2 (Quadtree), CPU: " << comp_time_CPU_optimized2 << "s\n";
+    cout << 1./comp_time_CPU_optimized2 << " max frames per second\n";
+    cout << "Number of colliding pairs: " << count_colliding_pairs(collisions_CPU_optimized2, num_particles) << "\n";
+
+    if(DEBUG_MODE) {
+        cout << "Colliding pairs:\n";
+        print_colliding_pairs(collisions_CPU_optimized2, num_particles);
+        print_collision_array(collisions_CPU_optimized2, num_particles);
+        cout << "---------------\n";
+    }
 
 
     /*********** GPU IMPLEMENTATION ***********/
@@ -282,15 +393,40 @@ int main(int argc, char **argv) {
     /*********** CHECK RESULTS ***********/
     // Assume the CPU naive alg is correct, since it's hardest to mess up.
 
+    cout << "\n----------------------------------------------\n";
+    cout << "Checking results ...\n";
+
     // Check collisions_CPU_naive vs collisions_CPU_optimized
-    for(int i = 0; i < num_particles * num_particles; i++) {
+    bool cpu1_correct = true;
+    for(unsigned long int i = 0; i < num_particles * num_particles; i++) {
         if(collisions_CPU_naive[i] != collisions_CPU_optimized[i]) {
             cout << "\n\nAlg Error: Optimized CPU alg 1 is wrong \n\n";
+            cpu1_correct = false;
             break;
             // return -1;
         }
     }
+    if(cpu1_correct) {
+        cout << "\nOptimized CPU alg 1 matches naive implementation!\n";
+    }
+    
 
+    // Check collisions_CPU_naive vs collisions_CPU_optimized2
+    bool cpu2_correct = true;
+    for(unsigned long int i = 0; i < num_particles * num_particles; i++) {
+        if(collisions_CPU_naive[i] != collisions_CPU_optimized2[i]) {
+            cout << "\n\nAlg Error: Optimized CPU alg 2 is wrong \n\n";
+            cpu2_correct = false;
+            break;
+            // return -1;
+        }
+    }
+    if(cpu2_correct) {
+        cout << "\nOptimized CPU alg 2 matches naive implementation! \n\n";
+    }
+
+
+    cout << "\n\n";
 
     /*********** WRITE DATA TO FILE ***********/
     
@@ -331,6 +467,9 @@ int main(int argc, char **argv) {
         system("python graph_it.py");
 
     }
+
+
+    /*********** FREE STUFF ***********/
 }
 
 

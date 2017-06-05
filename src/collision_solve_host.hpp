@@ -6,6 +6,10 @@
 #include <time.h> 
 #include <iostream>
 #include <climits>
+#include <algorithm>    // std::sort
+#include <vector>
+#include <math.h>
+
 
 
 using namespace std;
@@ -18,6 +22,11 @@ void detect_collisions_CPU_naive(Particle * particles,
 								float * comp_time);
 
 void detect_collisions_CPU_optimized1(Particle * particles, 
+									bool * output_collisions, 
+									unsigned int num_particles, 
+									float * comp_time);
+
+void detect_collisions_CPU_optimized2(Particle * particles, 
 									bool * output_collisions, 
 									unsigned int num_particles, 
 									float * comp_time);
