@@ -8,7 +8,9 @@ CUDA_BIN_PATH   ?= $(CUDA_PATH)/bin
 CUDA_LIB_PATH   ?= $(CUDA_PATH)/lib
 
 # CUDA code generation flags
-GENCODE_FLAGS   := -gencode arch=compute_20,code=sm_20 -gencode arch=compute_30,code=sm_30 -gencode arch=compute_35,code=sm_35
+GENCODE_FLAGS   := -gencode arch=compute_20,code=sm_20 -gencode arch=compute_30,code=sm_30 -gencode arch=compute_35,code=sm_35 -gencode arch=compute_50,code=sm_50 -gencode arch=compute_20,code=sm_21 
+# GENCODE_FLAGS   := -gencode arch=compute_30,code=sm_30 -gencode arch=compute_35,code=sm_35
+
 
 # Common binaries
 NVCC            ?= $(CUDA_BIN_PATH)/nvcc
@@ -40,13 +42,13 @@ TARGETS = main
 
 all: $(TARGETS)
 
-main: main.cpp collision_solve_host.o collision_solve_device.o ta_utilities.o
-	$(CC) $< -o $@ collision_solve_host.o collision_solve_device.o ta_utilities.o -O3 $(LDFLAGS) -Wall -I$(CUDA_INC_PATH) -fopenmp
+main: main.cpp ta_utilities.o collision_solve_host.o collision_solve_device.o 
+	$(CC) $< -o $@ ta_utilities.o collision_solve_host.o collision_solve_device.o -O3 $(LDFLAGS) -Wall -I$(CUDA_INC_PATH) -fopenmp
 
 collision_solve_host.o: collision_solve_host.cpp
 	$(CC) -std=c++11 -O3 $(LDFLAGS) -Wall -I$(CUDA_INC_PATH) -o $@ -c $<
 
-collision_solve_device.o: collision_solve_device.cu
+collision_solve_device.o: collision_solve_device.cu 
 	$(NVCC) $(NVCCFLAGS) -O3 $(EXTRA_NVCCFLAGS) $(GENCODE_FLAGS) -I$(CUDA_INC_PATH) -o $@ -c $<
 
 ta_utilities.o: ta_utilities.cpp

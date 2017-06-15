@@ -19,12 +19,26 @@
 #include <time.h> 
 #include <climits>
 #include <math.h>
+#include <cuda_runtime.h>
+
 
 #include "project_typedefs.hpp"
 #include "collision_solve_host.hpp"
 #include "collision_solve_device.cuh"
+#include "ta_utilities.hpp"
 
 using namespace std;
+
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+{
+    if (code != cudaSuccess) 
+    {
+        fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+        exit(code);
+    }
+}
+
 
 /*
 Prints the contents of 'particles'
@@ -84,7 +98,6 @@ void print_collision_array(bool * output_collisions, unsigned int num_particles)
 
 int main(int argc, char **argv) {
 
-
     /* initialize random seed: */
     srand (time(NULL));
 
@@ -128,7 +141,7 @@ int main(int argc, char **argv) {
 
 
     // Get user input
-    cout << "Enter number of particles: ";
+    cout << "Enter number of particles (max 60000): ";
     cin >> num_particles;
     cout << "Enter minimum particle radius: ";
     cin >> min_rad;
@@ -138,7 +151,7 @@ int main(int argc, char **argv) {
     cin >> box_x;
     cout << "Enter particle holding box's y length: ";
     cin >> box_y;
-    cout << "Cluster points around center, or uniformly distributed? 1 for cluster, 0 for uniform:"; // TODO REMOVE cluster if i can't find the bug
+    cout << "Cluster points around center, or uniformly distributed? 1 for cluster, 0 for uniform (cluster is unstable with particle count above 10000):"; 
     cin >> cluster;
 
     // Cap number of particles at 60000 to prevent overflow error
@@ -161,6 +174,14 @@ int main(int argc, char **argv) {
     cout << "\nGenerating " << num_particles << " particles with radii in the range " 
         << min_rad << " to " << max_rad << " (inclusive), inside a bounding box with dimemsions " 
         << box_x << " by " << box_y << "\n\n";
+
+
+    // I am not sure why, but having this line caused an error
+    //      *** stack smashing detected ***: <unknown> terminated
+    // TA_Utilities::select_least_utilized_GPU();
+
+    int max_time_allowed_in_seconds = 40;
+    TA_Utilities::enforce_time_limit(max_time_allowed_in_seconds);
 
 
     // Generate array of circular particles
@@ -199,9 +220,6 @@ int main(int argc, char **argv) {
             float y_range = box_y - (2 * particles[i].radius);
 
 
-            // cout << "x_range: " << x_range << "\n";
-            // cout << "y_range: " << y_range << "\n"; // TODO DELETE
-
             float radius; // max radius is min(x_range, y_range)
             float max_rad;
             if(x_range < y_range) {
@@ -211,10 +229,6 @@ int main(int argc, char **argv) {
                 max_rad = y_range / 2.;
             }
 
-            // cout << "max_rad: " << max_rad << "\n"; // TODO DELETE
-
-
-
             // radius = (r2 * max_rad) * (r2 * max_rad) / max_rad; // Uniform squared
             if(max_rad == 0.) {
                 radius = 0.;
@@ -223,25 +237,18 @@ int main(int argc, char **argv) {
                 radius = (r2 * max_rad) * (r2 * max_rad) * (r2 * max_rad) / (max_rad * max_rad); // Uniform cubed
             }
             
-            
-
-            // cout << "radius: " << radius << "\n"; // TODO DELETE
 
             float radians = r3 * 6.28318530718; // Between 0 and 2pi
 
-            // cout << "radians: " << radians << "\n"; // TODO DELETE
 
             // x = r*cos(t)
             // y = r*sin(t)
             particles[i].x = (radius * cos(radians)) + (x_range / 2.) + particles[i].radius;
 
-            // cout << "particles[i].x: " << particles[i].x << "\n"; // TODO DELETE
-
 
 
             particles[i].y = (radius * sin(radians)) + (y_range / 2.) + particles[i].radius;
 
-            // cout << "particles[i].y: " << particles[i].y << "\n"; // TODO DELETE
 
             // float half_x_range = x_range / 2.;
             // float uniform_squared = (r2 * half_x_range) * (r2 * half_x_range) / (half_x_range);
@@ -318,8 +325,9 @@ int main(int argc, char **argv) {
     memset(collisions_CPU_naive, 0, sizeof(bool) * num_particles * num_particles);
     float comp_time_CPU_naive = -1.;
     detect_collisions_CPU_naive(particles, collisions_CPU_naive, num_particles, &comp_time_CPU_naive);
-    
-    cout << "\nComputation time for Naive Alg, CPU: " << comp_time_CPU_naive << "s\n";
+   
+    cout << "\nNAIVE CPU \n"; 
+    cout << "Computation time for Naive Alg, CPU: " << comp_time_CPU_naive << "s\n";
     cout << 1./comp_time_CPU_naive << " max frames per second\n";
     cout << "Number of colliding pairs: " << count_colliding_pairs(collisions_CPU_naive, num_particles) << "\n";
 
@@ -343,7 +351,8 @@ int main(int argc, char **argv) {
     float comp_time_CPU_optimized = -1.;
     detect_collisions_CPU_optimized1(particles, collisions_CPU_optimized, num_particles, &comp_time_CPU_optimized);
     
-    cout << "\n\nComputation time for Optimized Alg 1 (Sort and Sweep), CPU: " << comp_time_CPU_optimized << "s\n";
+    cout << "\n\nOPTIMIZED CPU 1 \n"; 
+    cout << "Computation time for Optimized Alg 1 (Sort and Sweep), CPU: " << comp_time_CPU_optimized << "s\n";
     cout << 1./comp_time_CPU_optimized << " max frames per second\n";
     cout << "Number of colliding pairs: " << count_colliding_pairs(collisions_CPU_optimized, num_particles) << "\n";
 
@@ -355,39 +364,111 @@ int main(int argc, char **argv) {
     }
 
 
-    // Optimized CPU implementation 2
-    bool * collisions_CPU_optimized2 = (bool *) malloc(sizeof(bool) * num_particles * num_particles);
-    if(collisions_CPU_optimized2 == NULL) {
-        cout << "malloc for collisions_CPU_optimized2 failed. failed to allocate " << (sizeof(bool) * num_particles * num_particles)
-                << "bytes.\n";
-        return -1;
-    }    
-    memset(collisions_CPU_optimized2, 0, num_particles * num_particles);
-    float comp_time_CPU_optimized2 = -1.;
-    detect_collisions_CPU_optimized2(particles, collisions_CPU_optimized2, num_particles, &comp_time_CPU_optimized2);
+    // // Optimized CPU implementation 2
+    // bool * collisions_CPU_optimized2 = (bool *) malloc(sizeof(bool) * num_particles * num_particles);
+    // if(collisions_CPU_optimized2 == NULL) {
+    //     cout << "malloc for collisions_CPU_optimized2 failed. failed to allocate " << (sizeof(bool) * num_particles * num_particles)
+    //             << "bytes.\n";
+    //     return -1;
+    // }    
+    // memset(collisions_CPU_optimized2, 0, num_particles * num_particles);
+    // float comp_time_CPU_optimized2 = -1.;
+    // detect_collisions_CPU_optimized2(particles, collisions_CPU_optimized2, num_particles, &comp_time_CPU_optimized2);
     
-    cout << "\n\nComputation time for Optimized Alg 2 (Quadtree), CPU: " << comp_time_CPU_optimized2 << "s\n";
-    cout << 1./comp_time_CPU_optimized2 << " max frames per second\n";
-    cout << "Number of colliding pairs: " << count_colliding_pairs(collisions_CPU_optimized2, num_particles) << "\n";
+    // cout << "\n\nOPTIMIZED CPU 2 \n"; 
+    // cout << "Computation time for Optimized Alg 2 (Quadtree), CPU: " << comp_time_CPU_optimized2 << "s\n";
+    // cout << 1./comp_time_CPU_optimized2 << " max frames per second\n";
+    // cout << "Number of colliding pairs: " << count_colliding_pairs(collisions_CPU_optimized2, num_particles) << "\n";
 
-    if(DEBUG_MODE) {
-        cout << "Colliding pairs:\n";
-        print_colliding_pairs(collisions_CPU_optimized2, num_particles);
-        print_collision_array(collisions_CPU_optimized2, num_particles);
-        cout << "---------------\n";
-    }
+    // if(DEBUG_MODE) {
+    //     cout << "Colliding pairs:\n";
+    //     print_colliding_pairs(collisions_CPU_optimized2, num_particles);
+    //     print_collision_array(collisions_CPU_optimized2, num_particles);
+    //     cout << "---------------\n";
+    // }
 
 
     /*********** GPU IMPLEMENTATION ***********/
 
+    // gpu arrays used for all kernels
+    Particle * dev_particles;
+    bool * dev_output_collisions;
+
+    gpuErrchk(cudaMalloc((void**)&dev_particles, sizeof(Particle) * num_particles));
+    gpuErrchk(cudaMalloc((void**)&dev_output_collisions, sizeof(bool) * num_particles * num_particles));
+    
+    gpuErrchk(cudaMemcpy(dev_particles, particles, sizeof(Particle) * num_particles, cudaMemcpyHostToDevice));
 
     // ******** GPU input array has to be copied all at once (cannot be streamed)
     // since collision detection requires access to all particles - assuming the 
     // particle array is in no particular order.
 
+    // GPU naive implementation
+    bool * collisions_GPU_naive = (bool *) malloc(sizeof(bool) * num_particles * num_particles);
+    if(collisions_GPU_naive == NULL) {
+        cout << "malloc for collisions_GPU_naive failed. failed to allocate " << (sizeof(bool) * num_particles * num_particles)
+                << "bytes.\n";
+        return -1;
+    }
+    memset(collisions_GPU_naive, 0, sizeof(bool) * num_particles * num_particles);
+    float comp_time_GPU_naive = -1.;
 
-    // Allocate space for GPU output
+    cout << "\n\nNAIVE GPU \n"; 
+    detect_collisions_GPU_naive(particles, collisions_GPU_naive, num_particles, &comp_time_GPU_naive, dev_particles, dev_output_collisions);
 
+    
+    cout << "Computation time for Naive Alg, GPU: " << comp_time_GPU_naive << "s\n";
+    cout << 1./comp_time_GPU_naive << " max frames per second\n";
+    cout << "Number of colliding pairs: " << count_colliding_pairs(collisions_GPU_naive, num_particles) << "\n";
+
+    if(DEBUG_MODE) {
+        cout << "Colliding pairs:\n";
+        print_colliding_pairs(collisions_GPU_naive, num_particles);
+        print_collision_array(collisions_GPU_naive, num_particles);
+        cout << "---------------\n";
+    }
+
+
+    // GPU optimized 1 implementation
+    bool * collisions_GPU_optimized1 = (bool *) malloc(sizeof(bool) * num_particles * num_particles);
+    if(collisions_GPU_optimized1 == NULL) {
+        cout << "malloc for collisions_GPU_optimized1 failed. failed to allocate " << (sizeof(bool) * num_particles * num_particles)
+                << "bytes.\n";
+        return -1;
+    }
+    memset(collisions_GPU_optimized1, 0, sizeof(bool) * num_particles * num_particles);
+    float comp_time_GPU_optimized1 = -1.;
+
+    // GPU Arrays needed for the sort-sweep alg
+    ParticleBound * dev_bounds_x;
+    ParticleBound * dev_bounds_y;
+    int * dev_active_particles;
+    int * dev_active_particles_len; // Keep track of dev_active_particles filled size 
+
+    gpuErrchk(cudaMalloc((void**)&dev_bounds_x, sizeof(ParticleBound) * num_particles * 2));
+    gpuErrchk(cudaMalloc((void**)&dev_bounds_y, sizeof(ParticleBound) * num_particles * 2));
+    gpuErrchk(cudaMalloc((void**)&dev_active_particles, sizeof(int) * num_particles));
+    gpuErrchk(cudaMalloc((void**)&dev_active_particles_len, sizeof(int)));
+
+    gpuErrchk(cudaMemset(dev_active_particles_len, 0, sizeof(int))); // Init length to 0
+
+    cout << "\n\nOPTIMIZED 1 GPU \n"; 
+
+
+    detect_collisions_GPU_optimized1(particles, collisions_GPU_optimized1, num_particles, &comp_time_GPU_optimized1, dev_particles, dev_output_collisions, dev_bounds_x, dev_bounds_y, dev_active_particles, dev_active_particles_len);
+
+
+    
+    cout << "Computation time for Optimized Alg 1, GPU: " << comp_time_GPU_optimized1 << "s\n";
+    cout << 1./comp_time_GPU_optimized1 << " max frames per second\n";
+    cout << "Number of colliding pairs: " << count_colliding_pairs(collisions_GPU_optimized1, num_particles) << "\n";
+
+    if(DEBUG_MODE) {
+        cout << "Colliding pairs:\n";
+        print_colliding_pairs(collisions_GPU_optimized1, num_particles);
+        print_collision_array(collisions_GPU_optimized1, num_particles);
+        cout << "---------------\n";
+    }
 
 
 
@@ -412,20 +493,53 @@ int main(int argc, char **argv) {
     }
     
 
-    // Check collisions_CPU_naive vs collisions_CPU_optimized2
-    bool cpu2_correct = true;
+    // Check collisions_CPU_naive vs collisions_CPU_optimized2 
+    // bool cpu2_correct = true;
+    // for(unsigned long int i = 0; i < num_particles * num_particles; i++) {
+    //     if(collisions_CPU_naive[i] != collisions_CPU_optimized2[i]) {
+    //         cout << "\n\nAlg Error: Optimized CPU alg 2 is wrong \n\n";
+    //         cpu2_correct = false;
+    //         break;
+    //         // return -1;
+    //     }
+    // }
+    // if(cpu2_correct) {
+    //     cout << "\nOptimized CPU alg 2 matches naive implementation! \n\n";
+    // }
+
+
+    // Check collisions_CPU_naive vs collisions_GPU_naive
+    bool gpu_naive_correct = true;
     for(unsigned long int i = 0; i < num_particles * num_particles; i++) {
-        if(collisions_CPU_naive[i] != collisions_CPU_optimized2[i]) {
-            cout << "\n\nAlg Error: Optimized CPU alg 2 is wrong \n\n";
-            cpu2_correct = false;
+        if(collisions_CPU_naive[i] != collisions_GPU_naive[i]) {
+            cout << "\n\nAlg Error: Naive GPU alg is wrong \n\n";
+            gpu_naive_correct = false;
             break;
             // return -1;
         }
     }
-    if(cpu2_correct) {
-        cout << "\nOptimized CPU alg 2 matches naive implementation! \n\n";
+    if(gpu_naive_correct) {
+        cout << "\nNaive GPU alg matches naive implementation! \n\n";
     }
 
+    // Check collisions_CPU_naive vs collisions_GPU_optimized1
+    bool gpu_op_correct = true;
+    for(unsigned long int i = 0; i < num_particles * num_particles; i++) {
+        if(collisions_CPU_naive[i] != collisions_GPU_optimized1[i]) {
+            cout << "\n\nAlg Error: Optimized 1 GPU alg is wrong \n\n";
+            gpu_op_correct = false;
+            break;
+            // return -1;
+        }
+    }
+    if(gpu_op_correct) {
+        cout << "\nOptimized 1 GPU alg matches naive implementation! \n\n";
+    }
+
+
+
+
+ // collisions_GPU_optimized1
 
     cout << "\n\n";
 
@@ -444,7 +558,7 @@ int main(int argc, char **argv) {
         ofstream particle_data_file;
         particle_data_file.open ("../output/particle_data.csv");
         particle_data_file << box_x << "," << box_y << "\n";
-        for(int i = 0; i < num_particles; i++) {
+        for(unsigned int i = 0; i < num_particles; i++) {
             particle_data_file << particles[i].x << "," << particles[i].y << "," << particles[i].radius << "\n";
         }
         particle_data_file.close();
@@ -465,12 +579,26 @@ int main(int argc, char **argv) {
             
         }
 
-        system("python graph_it.py");
-
+        int sys_call_response = system("python graph_it.py");
+        if(sys_call_response == 0) {
+            cout << "oops: something wrong with python graphing script\n";
+        }
     }
 
 
     /*********** FREE STUFF ***********/
+    free(particles);
+    free(collisions_CPU_naive);
+    free(collisions_CPU_optimized);
+    free(collisions_GPU_naive);
+    free(collisions_GPU_optimized1);
+
+    gpuErrchk(cudaFree(dev_particles));
+    gpuErrchk(cudaFree(dev_output_collisions));
+    gpuErrchk(cudaFree(dev_bounds_x));
+    gpuErrchk(cudaFree(dev_bounds_y));
+    gpuErrchk(cudaFree(dev_active_particles));
+    gpuErrchk(cudaFree(dev_active_particles_len));
 }
 
 

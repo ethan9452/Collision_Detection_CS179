@@ -12,13 +12,14 @@
 
 #include "ta_utilities.hpp"
 
+
 #include <unistd.h> // sleep, fork, getpid
 #include <signal.h> // kill
 #include <cstdio> // printf
 #include <stdlib.h> // popen, pclose, atof, fread
 #include <cuda_runtime.h> // cudaGetDeviceCount, cudaSetDevice
 #define GB_PER_B 1.0e-9 // GigaBytes per Byte
-#define DEBUGG 0 // Set to 1 to enable extra print statements
+#define DEBUGG 1 // Set to 1 to enable extra print statements
 
 /*
 Modified from:
@@ -48,6 +49,11 @@ namespace TA_Utilities
           printf("select_coldest_GPU: Error - No GPU detected\n");
           return;
       }
+      if(DEBUGG == 1) {
+        printf("%d GPUs\n ", num_devices);
+      }
+
+
       // Read GPU "nvidia-smi" info into buffer "output" fo size MAX_BYTES
       const unsigned int MAX_BYTES = 10000;
       char output[MAX_BYTES];
@@ -152,14 +158,31 @@ namespace TA_Utilities
       printf("GPU # %d selected. Temperature: %d C. Memory being used: %f GB of %f GB  (%u %%)\n", 
           index_of_min, (int)min_temp, current_memory_useages[index_of_min], 
           total_memory_capacities[index_of_min], percent_mem);
+
+
       gpuErrchk( cudaSetDevice(index_of_min) );
+
 
       // Free memory and return
       delete [] temperatures;
+
+
       delete [] memory_ratios;
+
+
+
       delete [] current_memory_useages;
+
+
+
       delete [] total_memory_capacities;
+
+
+
       delete [] utilization_scores;
+
+
+
       return;
   } // end "void select_least_utilized_GPU()""
 

@@ -115,7 +115,6 @@ void detect_collisions_CPU_optimized1(Particle * particles, bool * output_collis
 	// and calculate variance of positions. 
 	float x_sum = 0.; 
 	float y_sum = 0.;
-
 	for(unsigned int i = 0; i < num_particles; i++) {
 		bounds_x[2 * i].position = particles[i].x - particles[i].radius;
 		bounds_x[2 * i].is_begin = true;
@@ -142,6 +141,8 @@ void detect_collisions_CPU_optimized1(Particle * particles, bool * output_collis
 		y_sum += (particles[i].y + particles[i].radius);
 	}
 
+
+	// Calculating Variance of x and y axis
 	float x_mean = x_sum / (float) (num_particles * 2);
 	float y_mean = y_sum / (float) (num_particles * 2);
 
@@ -158,14 +159,14 @@ void detect_collisions_CPU_optimized1(Particle * particles, bool * output_collis
 	ParticleBound * bounds_chosen;
 	if(x_var > y_var) {
 		bounds_chosen = bounds_x;
-		// TODO: free bounds_y
+
 #if DEBUG == 2
 cout << "\nx-axis has more variance\n";
 #endif
 	}
 	else {
 		bounds_chosen = bounds_y;
-		// TODO: free bounds_x
+
 #if DEBUG == 2
 cout << "\ny-axis has more variance\n";
 #endif
@@ -195,14 +196,15 @@ cout << "\n";
 	// are possible colliding. If they are possibly colliding, then check if they are colliding
 
 	// List of particle_idx's that are 'active', ie: we are still inside its bounds
-	vector<unsigned int> active_particles; // TODO: According to stackoverflow, contents are stored on heap. Not sure, if its not this could lead to problems.
-	
+	vector<unsigned int> active_particles; 
+
 	// Iterate through the sorted list of bounds
 	for(unsigned long int i = 0; i < 2*num_particles; i++) {
 		if(bounds_chosen[i].is_begin == true) {
 			// Elements of active_particles are all potential collisions.
 			// Check with each element of active_particles
 			for(unsigned int active_idx = 0; active_idx < active_particles.size(); active_idx++) {
+
 #if DEBUG == 2
 cout << "possible collision between " << bounds_chosen[i].particle_idx << ", " << active_particles[active_idx] << "\n";
 #endif
@@ -225,7 +227,9 @@ cout << "YES! collision between " << bounds_chosen[i].particle_idx << ", " << ac
 	}
 
 
-	// TODO: free all malloc'ed stuff
+
+	free(bounds_x);
+	free(bounds_y);
 
 	*comp_time = float( clock () - begin_time ) /  CLOCKS_PER_SEC;
 }
