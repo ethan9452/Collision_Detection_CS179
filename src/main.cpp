@@ -17,11 +17,12 @@
 #include <fstream>
 #include <stdlib.h> // srand, rand
 #include <time.h> 
-#include "project_typedefs.hpp"
-#include "collision_solve_host.hpp"
 #include <climits>
 #include <math.h>
 
+#include "project_typedefs.hpp"
+#include "collision_solve_host.hpp"
+#include "collision_solve_device.cuh"
 
 using namespace std;
 
